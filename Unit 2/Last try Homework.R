@@ -23,7 +23,7 @@ summary(reg.fwd)$bic
 
 ##### RSS #########
 rss<-summary(reg.fwd)$rss
-plot(1:20,rss,type="l",ylab="train RSS",xlab="# of predictors")
+plot(1:7,rss,type="l",ylab="train RSS",xlab="# of predictors")
 index<-which(rss==min(rss))
 points(index,rss[index],col="red",pch=10)
 
@@ -41,6 +41,9 @@ train <- Auto[sample, ]
 test  <- Auto[-sample, ]
 #summary(test2)
 #summary(train2)
+dim(train)
+dim(test)
+dim(Auto)
 
 reg.fwd=regsubsets(log(mpg)~.,data=train,method="forward",nvmax=20)
 
@@ -66,16 +69,16 @@ predict.regsubsets =function (object , newdata ,id ,...){
 
 testASE<-c()
 
-for (i in 1:20){
+for (i in 1:7){
   predictions<-predict.regsubsets(object=reg.fwd,newdata=test,id=i) 
   testASE[i]<-mean((log(test$mpg)-predictions)^2)
 }
 par(mfrow=c(1,1))
-plot(1:20,testASE,type="l",xlab="# of predictors",ylab="test vs train ASE")
+plot(1:7,testASE,type="l",xlab="# of predictors",ylab="test vs train ASE", ylim=c(0, .05))
 index<-which(testASE==min(testASE))
 points(index,testASE[index],col="red",pch=10)
 rss<-summary(reg.fwd)$rss
-lines(1:20,rss/196,lty=3,col="blue")  #Dividing by 100 since ASE=RSS/sample size
+lines(1:7,rss/196,lty=3,col="blue")  #Dividing by 100 since ASE=RSS/sample size
 
 
 reg.final=regsubsets(log(mpg)~.,data=Auto,method="forward",nvmax=4)
