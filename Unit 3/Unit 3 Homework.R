@@ -78,7 +78,7 @@ ggplot(sumstats,aes(x=DepthCat,y=Mean,group=Strata,colour=Strata))+
 
 
 ggplot(sumstats,aes(x=DepthCat,y=Mean,group=Strata,colour=Strata))+
-  ylab("ACT Score")+
+  ylab("Iridium")+
   geom_line()+
   geom_point()+
   geom_errorbar(aes(ymin=Mean-SD,ymax=Mean+SD),width=.1)
@@ -86,7 +86,7 @@ ggplot(sumstats,aes(x=DepthCat,y=Mean,group=Strata,colour=Strata))+
 ### Question 2 -> 2 way Anova model
 
 library(gridExtra)
-model.fit<-aov(Iridium~DepthCat+Strata+DepthCat:Strata,data=irid)
+model.fit<-aov(Iridium~DepthCat+Strata+Strata:DepthCat,data=irid)
 myfits<-data.frame(fitted.values=model.fit$fitted.values,residuals=model.fit$residuals)
 
 
@@ -99,16 +99,16 @@ plot2<-ggplot(myfits,aes(sample=residuals))+
   stat_qq()+geom_abline(intercept=mean(myfits$residuals), slope = sd(myfits$residuals))
 
 #Histogram of residuals
-plot3<-ggplot(myfits, aes(x=residuals)) + 
-  geom_histogram(aes(y=..density..),binwidth=45,color="black", fill="gray")+
-  geom_density(alpha=.5, fill="red")
+plot3<-ggplot(myfits, aes(x = residuals)) + 
+  geom_histogram(aes(y = ..density..),binwidth = 45,color = "black", fill = "gray") +
+  geom_density(alpha = .5, fill = "red")
 
 grid.arrange(plot1, plot2,plot3, ncol=3)
 
 ### Question 3 ###### Type III analysis
 
 library(car)
-Anova(model.fit,type=3)
+anova(model.fit,type=3)
 
 ### Question 4####### multiple comparision
 
@@ -118,8 +118,8 @@ plot(TukeyHSD(model.fit,"DepthCat:Strata",conf.level=.95))
 
 ####
 #library(eemeans) #maybe need eemeans package
-contrast.factor<-~DepthCat*Strata
-mycontrast<-c("3:Shale-1:Limestone","3:Shale-5:Limestone","3:Shale-6:Limestone")
+contrast.factor<-~Strata*DepthCat
+mycontrast<-c("Shale:3-Limestone:1","Shale:3-Limestone:5","Shale:3-Limestone:6")
 dat<-irid
 
 
