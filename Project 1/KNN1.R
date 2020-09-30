@@ -5,7 +5,7 @@ life = read.csv("/Users/apurv/Documents/SMU/6372 - Applied Statistics/Projects/P
 #######################################################
 ##################Sample - Method 1####################
 #######################################################
-life1=na.omit(life) # remove all NA - just for running the model. This is NOT to be used in final model.
+life1=na.omit(life) # remove all NA - just for running the model. This is not final.
 
 test =1:500
 standardized.X=scale(life1[,c(-1,-2,-3,-4)])
@@ -30,6 +30,11 @@ training.samples <- life1$Life.expectancy %>%
   createDataPartition(p = 0.8, list = FALSE)
 train.data  <- life1[training.samples, ]
 test.data <- life1[-training.samples, ]
+
+#Compute KNN using caret.
+#The best k is the one that minimize the prediction error RMSE (root mean squared error).
+
+#The RMSE corresponds to the square root of the average difference between the observed known outcome values and the predicted values, RMSE = mean((observeds - predicteds)^2) %>% sqrt(). The lower the RMSE, the better the model.
 
 # Fit the model on the training set
 set.seed(123)
