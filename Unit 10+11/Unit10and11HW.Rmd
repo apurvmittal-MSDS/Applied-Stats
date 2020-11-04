@@ -91,7 +91,7 @@ mymat
 oddsratio.wald(mymat, rev = "columns")
 
 #Relative Risk Intervals
-riskratio.wald(mymat)
+riskratio.wald(mymat,rev = "rows")
 ```
 
 __HW Questions__

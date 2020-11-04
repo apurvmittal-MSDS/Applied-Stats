@@ -24,6 +24,10 @@ table(knn.pred,test.Y)
 #######################################################
 ##################Sample - Method 2####################
 #######################################################
+life1$LOGunder.five.deaths = log(life1$under.five.deaths)
+life1$LOGHIV = log(life1$HIV.AIDS)
+life1$LOGPercExp = log(life1$percentage.expenditure)
+life1$Status=as.factor(life1$Status)
 
 set.seed(123)
 training.samples <- life1$Life.expectancy %>%
@@ -34,7 +38,7 @@ test.data <- life1[-training.samples, ]
 # Fit the model on the training set
 set.seed(123)
 model <- train(
-  Life.expectancy~., data = train.data, method = "knn",
+  Life.expectancy~Status+Adult.Mortality+Alcohol+percentage.expenditure+Measles+BMI+under.five.deaths+Polio+Total.expenditure+Diphtheria+HIV.AIDS+thinness..1.19.years+Income.composition.of.resources+Schooling, data = train.data, method = "knn",
   trControl = trainControl("cv", number = 10),
   preProcess = c("center","scale"),
   tuneLength = 10
