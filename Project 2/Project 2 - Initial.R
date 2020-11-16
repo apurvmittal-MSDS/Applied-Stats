@@ -60,3 +60,7 @@ summary(df_clean$y)
 df_downsample <- downSample(df_clean, df$y)
 summary(df_downsample$Class)
 summary(df_downsample)
+
+
+####
+model <- glm(y ~.,family=binomial(link='logit'),data=trainbankdata)
