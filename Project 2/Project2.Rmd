@@ -1,0 +1,685 @@
+---
+title: "Bank Marketing Data – A Statistical Analysis Project"
+author: "Samuel Vonpaays Soh, Eric Romero, Ravi Sivaraman, Apurv Mittal"
+Subject: "Applied Stats 2 by Dr. Turner"
+date: "11/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+```
+
+
+
+```{r echo=FALSE}
+#include libraries
+library(GGally)
+library(ISLR)
+library(car)
+library(caret)
+library(class)
+library(dplyr)
+library(e1071)
+library(epiDisplay)
+library(forecast)
+library(ggcorrplot)
+library(ggplot2)
+library(glmnet)
+library(groupdata2)
+library(heatmaply)
+library(leaps)
+library(mlbench)
+library(plyr)
+library(randomForest)
+library(rgl)
+library(stats)
+library(tree)
+require(caTools)
+library( klaR)
+
+```
+
+
+# EDA 
+```{r echo=TRUE}
+#Load from CSV file
+data_file_location = "/Users/ravisivaraman/Downloads/bank-additional/bank-additional-full.csv"
+
+bank_Data <- read.csv2(data_file_location, header = TRUE, sep = ";")
+
+# Convert response variable to a factor
+bank_Data$y<-as.factor(bank_Data$y)
+
+# Check summary of original data
+summary(bank_Data)
+
+# Several "Unknown" or missing data. Assigning all unknown as NA 
+bank_Data[bank_Data=="unknown"] <- NA
+sum(is.na(bank_Data))
+
+# Removing all the NAs
+bank.nona = na.omit(bank_Data)
+sum(is.na(bank.nona))
+
+# Since the data is imbalance and the number of "Yes" for the response variable are very small compared to "No". Downsampling the data to make it balanced.
+set.seed(12345)
+bank.ds <-downSample(bank.nona, y=bank.nona$y)
+summary(bank.ds)
+
+```
+
+
+```{r echo=FALSE}
+
+#Setup data for KNN
+attach(bank.ds)
+
+
+bank.ds$month<-as.factor(bank.ds$month)
+bank.ds$marital<-as.factor(bank.ds$marital)
+bank.ds$education<-as.factor(bank.ds$education)
+bank.ds$default<-as.factor(bank.ds$default)
+bank.ds$housing<-as.factor(bank.ds$housing)
+bank.ds$loan<-as.factor(bank.ds$loan)
+bank.ds$contact<-as.factor(bank.ds$contact)
+bank.ds$day_of_week<-as.factor(bank.ds$day_of_week)
+bank.ds$poutcome<-as.factor(bank.ds$poutcome)
+bank.ds$job<-as.factor(bank.ds$job)
+
+bank.ds$emp.var.rate<-as.numeric(bank.ds$emp.var.rate)
+bank.ds$cons.price.idx<-as.numeric(bank.ds$cons.price.idx)
+bank.ds$cons.conf.idx<-as.numeric(bank.ds$cons.conf.idx)
+bank.ds$euribor3m<-as.numeric(bank.ds$euribor3m)
+bank.ds$nr.employed <-as.numeric(bank.ds$nr.employed)
+
+
+
+bank1 <- bank.ds[,c(1,11,12,21)]
+bank2 <- bank.ds[,c(1,11,12, 13,14,16,17,18,19,20)]
+bank3 <- bank.ds[,c(1,11,12, 13,14,16,17,18,19,20,21)]
+```
+
+
+## Plotting Predictors in the model
+```{r echo=TRUE}
+
+# Splitting into Categorical variables
+bank.Fact <- bank.ds[, c(2,3,4,6,7,8,9,10,15,21)]
+bank.Fact1 <- bank.ds[, c(2,3,4,6,21)]
+bank.Fact2 <- bank.ds[, c(7,8,9,10,15,21)]
+
+# Splitting into Continous variables
+
+bank.Cont <- bank.ds[, c(1,11,12,13,14,16,17,18,19,20)]
+bank.Cont1 <- bank.ds[, c(1,11,12,13,14,21)] # Adding Response variable also
+bank.Cont2 <- bank.ds[, c(16,17,18,19,20,21)]  # Adding Response variable also
+
+# Categorical
+
+bank_cat1 = bank.ds[,2:10]
+
+str(bank.ds)
+pairs(bank1)
+bank.ds$y=bank.ds$Class
+attach(bank.ds)
+aggregate(y~age,data=bank.ds,summary)
+
+plot(age~y,col=c("red","blue"))
+
+plot(campaign~y, col=c("red","blue"))
+
+plot(duration~y, col=c("red","blue"))
+
+plot(emp.var.rate~y, col=c("red","blue"))
+
+plot(cons.conf.idx~y, col=c("red","blue"))
+
+ggplot(bank.ds,aes(x = month, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds,aes(x = marital, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds,aes(x = education, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds,aes(x = default, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds,aes(x = poutcome, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds,aes(x = day_of_week, fill = y)) + geom_bar(position = "dodge")
+
+ggplot(bank.ds, aes(x = y, fill = marital)) + geom_density() + labs(title = " Distribution by Marital Status")
+#
+## All Default values are NO
+
+summary(bank.ds$default)
+```
+
+## Aggregate
+
+```{r echo=TRUE}
+
+## Aggregates
+aggregate(y~marital,data=bank.ds,summary)
+
+aggregate(y~month,data=bank.ds,summary)
+
+aggregate(y~default,data=bank.ds,summary)
+
+aggregate(y~education,data=bank.ds,summary)
+  
+aggregate(y~poutcome,data=bank.ds,summary)
+
+## GGpairs
+
+ggpairs(bank1,aes(colour=y))
+
+ggpairs(bank2,aes(colour=y))
+
+ggpairs(bank_cat1,aes(colour=y))
+```
+
+
+
+
+### Heatmaps
+```{r echo=TRUE}
+####### PCA ##########
+# 
+# pca1<-prcomp(bank2,scale.=TRUE)
+# plot(prcomp(bank2))
+# pc.scores<-pca1$x
+# pairs(pc.scores)
+# cor(pc.scores)
+# 
+# 
+# ######
+# 
+# 
+# prop.table(table(y,month),2)
+# plot(y~month,col=c("red","blue"))
+
+
+### Correlation test for factors and Continous variables
+
+
+model.matrix(~0+., data=bank.Fact1) %>%
+  cor() %>%
+  ggcorrplot(show.diag = F, type="upper", lab=TRUE, lab_size=2.5, insig = "blank")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1,size = 8), axis.text.y = element_text(hjust = 1,size = 8))
+
+
+model.matrix(~0+., data=bank.Fact2) %>%
+  cor() %>%
+  ggcorrplot(show.diag = F, type="upper", lab=TRUE, lab_size=2.5, insig = "blank")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1,size = 8), axis.text.y = element_text(hjust = 1,size = 8))
+
+
+model.matrix(~0+., data=bank.Cont1) %>%
+  cor() %>%
+  ggcorrplot(show.diag = F, type="upper", lab=TRUE, lab_size=3, insig = "blank")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1,size = 10), axis.text.y = element_text(hjust = 1,size = 10))
+
+model.matrix(~0+., data=bank.Cont2) %>%
+  cor() %>%
+  ggcorrplot(show.diag = F, type="upper", lab=TRUE, lab_size=3, insig = "blank")+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1,size = 10), axis.text.y = element_text(hjust = 1,size = 10))
+```
+
+
+## Feature Selection
+
+
+```{r echo=TRUE}
+#Setup Data
+
+bank_additional = read.csv(data_file_location, sep=";")
+
+
+#Cleanup; remove na's 
+bank_additional[bank_additional=="unknown"] <- NA
+bank_additional.nona = na.omit(bank_additional)
+
+#Make columns as factors
+bank_additional.nona$contact = as.factor(bank_additional.nona$contact)
+bank_additional.nona$poutcome = as.factor(bank_additional.nona$poutcome)
+bank_additional.nona$day_of_week = as.factor(bank_additional.nona$day_of_week)
+bank_additional.nona$month = as.factor(bank_additional.nona$month)
+bank_additional.nona$loan = as.factor(bank_additional.nona$loan)
+bank_additional.nona$housing = as.factor(bank_additional.nona$housing)
+bank_additional.nona$default = as.factor(bank_additional.nona$default)
+bank_additional.nona$education = as.factor(bank_additional.nona$education)
+bank_additional.nona$marital = as.factor(bank_additional.nona$marital)
+bank_additional.nona$job = as.factor(bank_additional.nona$job)
+bank_additional.nona$y = as.factor(bank_additional.nona$y)
+
+
+#Down Sample
+bankadditional_ds = downSample(bank_additional.nona, y=bank_additional.nona$y)
+nrow(bankadditional_ds)
+
+#Remove Default column from the dataframe (and y, it is copied as Class)
+bankaddition_ds_nodef = within(bankadditional_ds, rm(default))
+
+
+#Setup test and train dataset
+smp_size <- floor(0.75 * nrow(bankaddition_ds_nodef))
+
+set.seed(123)
+train_bankdata <- sample(seq_len(nrow(bankaddition_ds_nodef)), size = smp_size)
+
+train_bankdata_ds = bankaddition_ds_nodef[train_bankdata,]
+test_bankdata_ds = bankaddition_ds_nodef[-train_bankdata,]
+str(train_bankdata_ds)
+colnames(train_bankdata_ds)
+
+```
+
+## Lasso Feature Selection
+
+
+```{r echo=TRUE}
+dat.train.x  = model.matrix(Class~age+campaign+cons.conf.idx+cons.price.idx+contact+day_of_week+education+emp.var.rate+euribor3m+housing+job+loan+marital+month+nr.employed+pdays+poutcome+previous,train_bankdata_ds)
+#dat.train.x  = model.matrix(Class~.,train_bankdata_ds)
+dat.train.y<- train_bankdata_ds[,20]
+cvfit <- cv.glmnet(dat.train.x, dat.train.y, family = "binomial", type.measure = "class", nlambda = 1000)
+finalmodel<-glmnet(dat.train.x, dat.train.y, family = "binomial",lambda=cvfit$lambda.min)
+
+dat.test.x  = model.matrix(Class~age+campaign+cons.conf.idx+cons.price.idx+contact+day_of_week+education+emp.var.rate+euribor3m+housing+job+loan+marital+month+nr.employed+pdays+poutcome+previous,test_bankdata_ds)
+#dat.test.x  = model.matrix(Class~.,test_bankdata_ds)
+fit.pred.lasso <- predict(finalmodel, newx = dat.test.x, type = "response")
+
+```
+
+## Stepwise - Forward, Backward and Both
+
+```{r echo=TRUE}
+
+full.log<-glm(Class~age+campaign+cons.conf.idx+cons.price.idx+contact+day_of_week+education+emp.var.rate+euribor3m+housing+job+loan+marital+month+nr.employed+pdays+poutcome+previous,family="binomial",data=train_bankdata_ds)
+#full.log<-glm(Class~.,family="binomial",data=train_bankdata_ds)
+forward.step.log<-full.log %>% stepAIC(direction="forward", trace=FALSE)
+backward.step.log<-full.log %>% stepAIC(direction="back", trace=FALSE)
+both.step.log<-full.log %>% stepAIC(direction="both", trace=FALSE)
+
+exp(cbind("Odds ratio" = coef(forward.step.log), confint.default(forward.step.log, level = 0.95)))
+
+fit.pred.step.forward<-predict(forward.step.log,newdata=test_bankdata_ds,type="response")
+fit.pred.step.backward<-predict(backward.step.log,newdata=test_bankdata_ds,type="response")
+fit.pred.step.both<-predict(both.step.log,newdata=test_bankdata_ds,type="response")
+```
+
+Find the best cutoff
+```{r echo=TRUE}
+
+accuracy_step.forward = c()
+accuracy_step.backward = c()
+accuracy_step.both = c()
+accuracy_lasso = c()
+
+sensitivity_step.forward = c()
+sensitivity_step.backward = c()
+sensitivity_step.both = c()
+sensitivity_lasso = c()
+
+specificity_step.forward = c()
+specificity_step.backward = c()
+specificity_step.both = c()
+specificity_lasso = c()
+
+for (counter in 1:9)
+{
+    cutoff=0.1 * counter
+
+    class.step.forward<-factor(ifelse(fit.pred.step.forward<cutoff,"no","yes"),levels=c("no","yes"))
+    conf.step.forward<-table(class.step.forward,test_bankdata_ds$Class)
+    cmval = confusionMatrix(conf.step.forward)
+    accuracy_step.forward[counter] = cmval$overall[1]
+    sensitivity_step.forward[counter] = cmval$byClass[1]
+    specificity_step.forward[counter] = cmval$byClass[2]
+
+    class.step.backward<-factor(ifelse(fit.pred.step.backward<cutoff,"no","yes"),levels=c("no","yes"))
+    conf.step.backward<-table(class.step.backward,test_bankdata_ds$Class)
+    cmval = confusionMatrix(conf.step.backward)
+    accuracy_step.backward[counter] = cmval$overall[1]
+    sensitivity_step.backward[counter] = cmval$byClass[1]
+    specificity_step.backward[counter] = cmval$byClass[2]
+	      
+    class.step.both<-factor(ifelse(fit.pred.step.both<cutoff,"no","yes"),levels=c("no","yes"))
+    conf.step.both<-table(class.step.both,test_bankdata_ds$Class)
+    cmval = confusionMatrix(conf.step.both)
+    accuracy_step.both[counter] = cmval$overall[1]
+    sensitivity_step.both[counter] = cmval$byClass[1]
+    specificity_step.both[counter] = cmval$byClass[2]
+
+    #Lasso accuracy
+    class.lasso<-factor(ifelse(fit.pred.lasso<cutoff,"no","yes"),levels=c("no","yes"))
+    conf.lasso<-table(class.lasso,test_bankdata_ds$Class)
+    cmval = confusionMatrix(conf.lasso)
+    accuracy_lasso[counter] = cmval$overall[1]
+    sensitivity_lasso[counter] = cmval$byClass[1]
+    specificity_lasso[counter] = cmval$byClass[2]
+
+}
+
+```
+
+### Plot the graph
+```{r echo=TRUE}
+plot(accuracy_step.forward, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", ylab="Accuracy")
+lines(accuracy_step.backward, col="orange",  type="b", lwd=1.5)
+lines(accuracy_step.both, col="pink",  type="b", lwd=1.5)
+lines(accuracy_lasso, col="blue", type="b", lwd=1.5)
+
+plot(sensitivity_step.forward, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", ylab="Sensitivity")
+lines(sensitivity_step.backward, col="orange",  type="b", lwd=1.5)
+lines(sensitivity_step.both, col="pink",  type="b", lwd=1.5)
+lines(sensitivity_lasso, col="blue", type="b", lwd=1.5)
+
+plot(specificity_step.forward, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", ylab="Specificity")
+lines(specificity_step.backward, col="orange",  type="b", lwd=1.5)
+lines(specificity_step.both, col="pink",  type="b", lwd=1.5)
+lines(specificity_lasso, col="blue",  type="b", lwd=1.5)
+
+```
+
+### Plot the graph by type
+```{r echo=TRUE}
+
+par(pch=22, col="blue") # plotting symbol and color
+par(mfrow=c(2,4)) # all plots on one page
+plot(accuracy_step.forward, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", main="Forward")
+lines(sensitivity_step.forward, col="orange",  type="b", lwd=1.5)
+lines(specificity_step.forward, col="pink",  type="b", lwd=1.5)
+
+plot(accuracy_step.backward, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", main="Backward")
+lines(sensitivity_step.backward, col="orange",  type="b", lwd=1.5)
+lines(specificity_step.backward, col="pink",  type="b", lwd=1.5)
+
+plot(accuracy_step.both, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", main="Both")
+lines(sensitivity_step.both, col="orange",  type="b", lwd=1.5)
+lines(specificity_step.both, col="pink",  type="b", lwd=1.5)
+
+plot(accuracy_lasso, type="l", col="red",ylim= c(0,1), xlab = "Cutoff/10", main="Lasso")
+lines(sensitivity_lasso, col="orange",  type="b", lwd=1.5)
+lines(specificity_lasso, col="pink",  type="b", lwd=1.5)
+```
+
+### Features by importance
+```{r echo=TRUE}
+
+imp = varImp(forward.step.log, scale=FALSE)
+#Plot importance
+ggplot2::ggplot(imp, aes(x=reorder(rownames(imp),Overall), y=Overall)) +
+geom_point( color="blue", size=4, alpha=0.6)+
+geom_segment( aes(x=rownames(imp), xend=rownames(imp), y=0, yend=Overall), 
+color='skyblue') +
+xlab('Variable')+
+ylab('Overall Importance')+
+theme_light() +
+coord_flip() 
+```
+## Goodness of Fit Test
+Chisq-test is used to compare observed sample distribution with the expected probability distribution. If the p-value is significant then model with categorical predictors have captured the expected probability distribution.
+
+```{r echo=TRUE}
+
+chisq = chisq.test(table(class.step.forward,test_bankdata_ds$Class), p=c(.5, .5))
+```
+
+The p-value is  *`r chisq$p.value`* which is less than α, which is significant. The logistic regression model has captured the categorical predictors well.
+
+
+
+# KNN
+KNN Analysis of the data.
+
+```{r echo=TRUE}
+bank.ds.red1 <- subset(bank.ds, select = -c(duration, pdays, default,day_of_week,cons.conf.idx) )
+
+bank.ds.red2 <- subset(bank.ds, select = -c(age,job, marital, education, duration, pdays, default,day_of_week,cons.conf.idx, nr.employed) )
+
+
+bank.ds.red3 <- subset(bank.ds, select = -c(age,job, marital, loan, housing, previous, education, duration, pdays, default,day_of_week,cons.conf.idx, nr.employed ) )
+
+
+
+KNN.Variables <- bank.ds.red1
+
+# In-order to use the factors for KNN Prediction. Convert Factors to Integer
+
+KNN.Variables$job<-as.integer(KNN.Variables$job)
+KNN.Variables$marital<-as.integer(KNN.Variables$marital)
+KNN.Variables$education<-as.integer(KNN.Variables$education)
+KNN.Variables$housing<-as.integer(KNN.Variables$housing)
+KNN.Variables$loan<-as.integer(KNN.Variables$loan)
+KNN.Variables$contact<-as.integer(KNN.Variables$contact)
+KNN.Variables$month<-as.integer(KNN.Variables$month)
+KNN.Variables$poutcome<-as.integer(KNN.Variables$poutcome)
+
+# Normalize all the variables
+
+KNN.DF.N <- data.frame(age = scale(KNN.Variables$age), job = scale(KNN.Variables$job),marital = scale(KNN.Variables$marital),
+                       education = scale(KNN.Variables$education), housing = scale(KNN.Variables$housing), loan = scale(KNN.Variables$loan),
+                       contact = scale(KNN.Variables$contact), month = scale(KNN.Variables$month), campaign = scale(KNN.Variables$campaign),
+                       previous = scale(KNN.Variables$previous), poutcome = scale(KNN.Variables$poutcome), emp.var.rate = scale(KNN.Variables$emp.var.rate),
+                       cons.price.idx = scale(KNN.Variables$cons.price.idx), euribor3m = scale(KNN.Variables$euribor3m), nr.employed = scale(KNN.Variables$nr.employed), y=KNN.Variables$y)
+
+
+# Run 10 iterations  on different train/test sets. We will compute the average accuracy, specificity and Sensitivity.
+iterations = 10
+numks = 50
+
+masterAcc = matrix(nrow = iterations,ncol = numks)
+masterSensitivity = matrix(nrow = iterations,ncol = numks)
+masterSpecificity = matrix(nrow = iterations,ncol = numks)
+splitPerc = .85 #Training / Test split Percentage
+for(j in 1:iterations)
+{
+  splitPerc = .85
+  set.seed(12345)
+  trainIndices = sample(1:dim(KNN.DF.N)[1],round(splitPerc * dim(KNN.DF.N)[1]))
+  train.KNN.DF = KNN.DF.N[trainIndices,]
+  test.KNN.DF = KNN.DF.N[-trainIndices,]
+  for(i in 1:numks)
+  {
+    classifications = knn(train.KNN.DF[,c(1:15)], test.KNN.DF[,c(1:15)],train.KNN.DF$y,prob=TRUE, k=i)
+    table(classifications,test.KNN.DF$y)
+    CM = confusionMatrix(table(classifications,test.KNN.DF$y))
+    masterAcc[j,i] = CM$overall[1]
+    masterSensitivity[j,i] = CM$byClass[1]
+    masterSpecificity[j,i] = CM$byClass[2]
+  }
+  
+  MeanAcc = colMeans(masterAcc)
+  MeanSensitivity = colMeans(masterSensitivity)
+  MeanSpecificity = colMeans(masterSpecificity)
+  masterAcc[j] = CM$overall[1]
+  masterSensitivity[j] = CM$byClass[1]
+  masterSpecificity[j] = CM$byClass[2]
+}
+plot(seq(1,numks,1),MeanAcc, type = "l", main = "Plot of value of K vs. Accuracy", xlab = "Value of K", ylab="Accuracy %")
+# Best K is at 45 with 73.76% Accuracy, Sensitivity is 78.20% and Specificity is 69.33%
+
+MeanAcc = mean(colMeans(masterAcc))
+MeanSpecificity = mean(colMeans(masterSpecificity))
+MeanSensitivity = mean(colMeans(masterSensitivity))
+
+print(paste("Best Accuracy at K =  ", which.max(colMeans(masterAcc)), "of", max(colMeans(masterAcc))*100,"%"))
+
+print(paste("Mean Accuracy = ", MeanAcc*100,"%"))
+print(paste("Mean Sensitivity = ", MeanSensitivity*100,"%"))
+print(paste("Mean Specificity = ", MeanSpecificity*100,"%"))
+
+
+# Run KNN Model for K=41
+classifications.K41 = knn(train.KNN.DF[,c(1:15)], test.KNN.DF[,c(1:15)],train.KNN.DF$y,prob=TRUE, k=41)
+#table(classifications.K41,test.AT.DF3$Attrition)
+CM.K41 = confusionMatrix(table(classifications.K41,test.KNN.DF$y))
+
+print(paste("Accuracy for K-41 = ", CM.K41$overall[1]*100,"%"))
+print(paste("Sensitivity for K-41 = ", CM.K41$byClass[1]*100,"%"))
+print(paste("Specificity for K-41 = ", CM.K41$byClass[2]*100,"%"))
+
+```
+
+## KNN With Only Continuous Data
+
+```{r echo=TRUE}
+# KNN with ONLY CONTINOUS VARIABLE Marketing Data===
+
+KNN.Variables <- bank.Cont
+
+
+# Normalize all the variables
+
+KNN.DF.N <- data.frame(age = scale(KNN.Variables$age),campaign = scale(KNN.Variables$campaign), pdays=scale(KNN.Variables$pdays), emp.var.rate = scale(KNN.Variables$emp.var.rate),
+                       cons.price.idx = scale(KNN.Variables$cons.price.idx), cons.conf.idx = scale(KNN.Variables$cons.conf.idx), euribor3m = scale(KNN.Variables$euribor3m), 
+                       nr.employed = scale(KNN.Variables$nr.employed), y=bank.ds$y)
+
+
+# Run 10 iterations  on different train/test sets. We will compute the average accuracy, specificity and Sensitivity.
+iterations = 10
+numks = 50
+
+masterAcc = matrix(nrow = iterations,ncol = numks)
+masterSensitivity = matrix(nrow = iterations,ncol = numks)
+masterSpecificity = matrix(nrow = iterations,ncol = numks)
+splitPerc = .85 #Training / Test split Percentage
+for(j in 1:iterations)
+{
+  splitPerc = .85
+  set.seed(12345)
+  trainIndices = sample(1:dim(KNN.DF.N)[1],round(splitPerc * dim(KNN.DF.N)[1]))
+  train.KNN.DF = KNN.DF.N[trainIndices,]
+  test.KNN.DF = KNN.DF.N[-trainIndices,]
+  for(i in 1:numks)
+  {
+    classifications = knn(train.KNN.DF[,c(1:8)], test.KNN.DF[,c(1:8)],train.KNN.DF$y,prob=TRUE, k=i)
+    table(classifications,test.KNN.DF$y)
+    CM = confusionMatrix(table(classifications,test.KNN.DF$y))
+    masterAcc[j,i] = CM$overall[1]
+    masterSensitivity[j,i] = CM$byClass[1]
+    masterSpecificity[j,i] = CM$byClass[2]
+  }
+  
+  MeanAcc = colMeans(masterAcc)
+  MeanSensitivity = colMeans(masterSensitivity)
+  MeanSpecificity = colMeans(masterSpecificity)
+  masterAcc[j] = CM$overall[1]
+  masterSensitivity[j] = CM$byClass[1]
+  masterSpecificity[j] = CM$byClass[2]
+}
+plot(seq(1,numks,1),MeanAcc, type = "l", main = "Plot of value of K vs. Accuracy", xlab = "Value of K", ylab="Accuracy %")
+
+#which.max(MeanAcc)
+#max(MeanSensitivity)
+#max(MeanSpecificity)
+
+# Best K is at 20 with 73.83% Accuracy, Sensitivity is 78.72% and Specificity is 69.19%
+
+MeanAcc = mean(colMeans(masterAcc))
+MeanSpecificity = mean(colMeans(masterSpecificity))
+MeanSensitivity = mean(colMeans(masterSensitivity))
+
+print(paste("Best Accuracy at K =  ", which.max(colMeans(masterAcc)), "of", max(colMeans(masterAcc))*100,"%"))
+
+print(paste("Mean Accuracy = ", MeanAcc*100,"%"))
+print(paste("Mean Sensitivity = ", MeanSensitivity*100,"%"))
+print(paste("Mean Specificity = ", MeanSpecificity*100,"%"))
+
+# Run KNN Model for K=20
+classifications.K20 = knn(train.KNN.DF[,c(1:8)], test.KNN.DF[,c(1:8)],train.KNN.DF$y,prob=TRUE, k=20)
+#table(classifications.K41,test.AT.DF3$Attrition)
+CM.K20 = confusionMatrix(table(classifications.K20,test.KNN.DF$y))
+
+print(paste("Accuracy for K-20 = ", CM.K41$overall[1]*100,"%"))
+print(paste("Sensitivity for K-20 = ", CM.K41$byClass[1]*100,"%"))
+print(paste("Specificity for K-20 = ", CM.K41$byClass[2]*100,"%"))
+```
+
+# Random Forest
+
+```{r echo=TRUE}
+df = bank_additional
+#df <- subset(df, select = c(y, age, campaign, pdays, previous, emp.var.rate, cons.price.idx, cons.conf.idx, euribor3m, nr.employed, default, housing, loan, poutcome))
+df <- subset(df, select = c(y, age, euribor3m))
+
+df[c("y")]<- lapply(df[c("y")], factor)
+#df[c("default")]<- lapply(df[c("default")], factor)
+#df[c("housing")]<- lapply(df[c("housing")], factor)
+#df[c("loan")]<- lapply(df[c("loan")], factor)
+#df[c("poutcome")]<- lapply(df[c("poutcome")], factor)
+
+dim(df) #rows and columns
+
+df_clean = df
+set.seed(12345)
+
+df_clean <- df_clean[!grepl('unknown', df_clean$default),]
+df_clean <- df_clean[!grepl('unknown', df_clean$housing),]
+df_clean <- df_clean[!grepl('unknown', df_clean$loan),]
+
+
+#df = df_clean
+
+#normalize data
+df_norm = normalize(df)
+
+summary(df_norm)
+
+sample = sample.split(df_norm$y, SplitRatio = .75)
+train = subset(df_norm, sample == TRUE)
+test  = subset(df_norm, sample == FALSE)
+dim(train)
+dim(test)
+
+rf <- randomForest(
+  y ~ .,
+  data=train
+)
+importance(rf)
+
+pred = predict(rf, newdata=test[-1])
+cm = table(test[,1], pred)
+confusionMatrix(cm)
+
+plot(pred , test$y,main="Bagged Model",xlab="Predicted",ylab="Test Set Y")
+abline (0,1)
+```
+
+## LDA
+
+LDA is not a good tool when there are categorical predictors and response variables. However the analysis here.
+
+```{r echo=FALSE}
+
+z = lda(Class~., data = train_bankdata_ds)
+z
+ldap = predict(z, test_bankdata_ds)$class
+summary(ldap)
+confusionMatrix(table(test_bankdata_ds$Class,ldap))
+
+
+#Plots of LDA with various variables
+lda_chi = chisq.test(table(test_bankdata_ds$Class,ldap), p=c(.5, .5))
+lda_chi
+
+#Plots for LDA
+
+partimat(Class~duration+euribor3m+age, data=test_bankdata_ds, method="lda")
+
+partimat(Class~duration+emp.var.rate, data=test_bankdata_ds, method="lda")
+
+
+```
+
+
+
+```{r echo=FALSE}
+#attach(df)
+#pred.surface<-matrix(predict(bag.full,predictors),301,51)
+#plot3d(euribor3m,age,y)
+#surface3d(0:300,0:50,pred.surface,alpha=.4)
+#partimat(Class~., data=test_bankdata_ds, method="lda")
+
+
+```
